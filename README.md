@@ -1,2 +1,2 @@
 # telegram
-Telegram bot for DailyAya
+Telegram bot for Aya Bot
