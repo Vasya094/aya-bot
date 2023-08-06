@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"No tests to run\" && exit 0",
-    "start": "node index.js"
+    "no": "node index.js"
   },
   "keywords": [
     "telegram",

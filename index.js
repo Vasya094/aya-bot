@@ -702,7 +702,7 @@ function aMenuButtons(menuState, ayaId, reciter){
         }
         buttons.inline_keyboard[0].push({
             text: "📖",
-            url: `https://quran.com.ua/${ayaIndex.sura}/${ayaIndex.aya}?r=asd`
+            url: `https://quran-online.ru/${ayaIndex.sura}/saadi#ayat-${ayaIndex.aya}`
         })
     }
 
@@ -1341,8 +1341,7 @@ bot.action(/^{"aReport/ , ctx =>{
      `Aya: ${ayaIndex.sura}-${ayaIndex.aya}, Reciter: ${callbackData.r}`
     )
     ctx.answerCbQuery(
-        `تم إرسال بلاغكم عن هذه الآية للفريق المختص.\nقد نتواصل معكم قريبا.\nجزاكم الله خيرا.\n\n`
-        +`Your report about this Aya has been sent to our team.\nWe might contact you soon.\nMay Allah reward you good.`,
+        `Ваш отчет об этом аяте был отправлен нашей команде.\nВозможно, мы свяжемся с вами в ближайшее время.\nДа вознаградит вас Аллах.`,
         {show_alert: true}
     )
 })
