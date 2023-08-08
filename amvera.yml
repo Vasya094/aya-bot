@@ -1,0 +1,13 @@
+meta:
+  environment: node
+  toolchain:
+    name: npm
+    version: 18
+build:
+  skip: 'yes'
+  scriptArguments: telegramToken=6386724201:AAGd73dgP34i427PVg0wICVOi4f_1n73LS0 PORT=3001
+    mongoDbUser=rinatkhabib26 mongoDbPass=zhh8Evhin9rbHUsI mongoSubdomain=g48uq1x
+run:
+  scriptName: index.js
+  persistenceMount: /data
+  containerPort: 3000
