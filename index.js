@@ -38,13 +38,20 @@ function log(x, e) {
       case 2:
         console.error(x, e)
         if (bot) {
-          bot.telegram
-            .sendMessage(devChatId, (x + JSON.stringify(e)).substring(0, 4096))
-            .then(resolve())
-            .catch((er) => {
-              console.error(`Error while sending log to devChat: `, er)
-              resolve()
-            })
+          try {
+            bot.telegram
+              .sendMessage(
+                devChatId,
+                (x + JSON.stringify(e)).substring(0, 4096)
+              )
+              .then(resolve())
+              .catch((er) => {
+                console.error(`Error while sending log to devChat: `, er)
+                resolve()
+              })
+          } catch (error) {
+            console.log(error)
+          }
         }
         break
       default:
@@ -106,63 +113,65 @@ client.connect((err, db) => {
 
 // Records the last time an aya was sent to a chat so we can send again periodically (daily, for example)
 function lastAyaTime(chatId, status, chatName, chatType, lang, trigger) {
-  var setObj = {}
-  status = status ?? "success" // Function can be called with chatId only if not blocked
+  if (chatId) {
+    var setObj = {}
+    status = status ?? "success" // Function can be called with chatId only if not blocked
 
-  setObj.since = { $cond: [{ $not: ["$since"] }, new Date(), "$since"] } // Add "Since" date only once
-  setObj.lastAyaTime = Date.now()
-  setObj.blocked = status.toLowerCase().includes("block")
-  if (chatName) setObj.name = chatName // Only update the name when it's known
-  if (lang) setObj.language_code = lang // Only update the language_code when it's known
-  if (chatType) setObj.chatType = chatType // Only update the chatType when it's known
-  if (trigger) {
-    setObj.lastTrigger = trigger
-    switch (trigger) {
-      case "surprise":
-        setObj.surprises = {
-          $cond: [{ $not: ["$surprises"] }, 1, { $add: ["$surprises", 1] }],
-        }
-        break
+    setObj.since = { $cond: [{ $not: ["$since"] }, new Date(), "$since"] } // Add "Since" date only once
+    setObj.lastAyaTime = Date.now()
+    setObj.blocked = status.toLowerCase().includes("block")
+    if (chatName) setObj.name = chatName // Only update the name when it's known
+    if (lang) setObj.language_code = lang // Only update the language_code when it's known
+    if (chatType) setObj.chatType = chatType // Only update the chatType when it's known
+    if (trigger) {
+      setObj.lastTrigger = trigger
+      switch (trigger) {
+        case "surprise":
+          setObj.surprises = {
+            $cond: [{ $not: ["$surprises"] }, 1, { $add: ["$surprises", 1] }],
+          }
+          break
 
-      case "next":
-        setObj.nexts = {
-          $cond: [{ $not: ["$nexts"] }, 1, { $add: ["$nexts", 1] }],
-        }
-        break
+        case "next":
+          setObj.nexts = {
+            $cond: [{ $not: ["$nexts"] }, 1, { $add: ["$nexts", 1] }],
+          }
+          break
 
-      case "request":
-        setObj.requests = {
-          $cond: [{ $not: ["$requests"] }, 1, { $add: ["$requests", 1] }],
-        }
-        break
+        case "request":
+          setObj.requests = {
+            $cond: [{ $not: ["$requests"] }, 1, { $add: ["$requests", 1] }],
+          }
+          break
 
-      case "timer":
-        setObj.timers = {
-          $cond: [{ $not: ["$timers"] }, 1, { $add: ["$timers", 1] }],
-        }
-        break
+        case "timer":
+          setObj.timers = {
+            $cond: [{ $not: ["$timers"] }, 1, { $add: ["$timers", 1] }],
+          }
+          break
 
-      default:
-        log("Unknown trigger: ", trigger)
-        break
+        default:
+          log("Unknown trigger: ", trigger)
+          break
+      }
     }
-  }
 
-  dbConn
-    ?.db("dailyAyaTelegram")
-    .collection("chats")
-    .updateOne({ chatId: chatId }, [{ $set: setObj }], { upsert: true })
-    .then(
-      log(
-        "Recorded Last Aya Time for chat " +
-          chatId +
-          " as " +
-          (setObj.blocked ? "blocked." : "successfuly sent.")
+    dbConn
+      ?.db("dailyAyaTelegram")
+      .collection("chats")
+      .updateOne({ chatId: chatId }, [{ $set: setObj }], { upsert: true })
+      .then(
+        log(
+          "Recorded Last Aya Time for chat " +
+            chatId +
+            " as " +
+            (setObj.blocked ? "blocked." : "successfuly sent.")
+        )
       )
-    )
-    .catch((e) =>
-      log("Failed to record Last Aya Time for chat " + chatId + ": ", e)
-    )
+      .catch((e) =>
+        log("Failed to record Last Aya Time for chat " + chatId + ": ", e)
+      )
+  }
 }
 
 // Sets the favorit reciter for chatIds that request so
@@ -197,29 +206,8 @@ function setFavReciter(chatId, reciterIdentifier) {
         )
         msg = `Текущий любимый чтец: ${requestedFavReciterData[0].englishName}`
       }
-      bot.telegram.sendMessage(chatId, msg, {
-        reply_markup: {
-          inline_keyboard: [
-            [
-              {
-                text: "🎁",
-                callback_data: "surpriseAya",
-              },
-            ],
-          ],
-        },
-      })
-    })
-    .catch((e) => {
-      log(
-        `Error while setting favorit reciter "${reciterIdentifier}" for chat ${chatId}:`,
-        e
-      )
-      msg = `عذرا.. نواجه مشكلة أثناء حفظ القارئ المفضل ونأمل حلها قريبا.
-
-Sorry.. There's an issue while setting favorite reciters and we hope it gets fixed soon.`
-      bot.telegram
-        .sendMessage(chatId, msg, {
+      try {
+        bot.telegram.sendMessage(chatId, msg, {
           reply_markup: {
             inline_keyboard: [
               [
@@ -231,9 +219,41 @@ Sorry.. There's an issue while setting favorite reciters and we hope it gets fix
             ],
           },
         })
-        .catch((er) =>
-          log(`Error while sending sorry for failing to set fav reciter: `, er)
-        )
+      } catch (error) {
+        console.log(error)
+      }
+    })
+    .catch((e) => {
+      log(
+        `Error while setting favorit reciter "${reciterIdentifier}" for chat ${chatId}:`,
+        e
+      )
+      msg = `عذرا.. نواجه مشكلة أثناء حفظ القارئ المفضل ونأمل حلها قريبا.
+
+Sorry.. There's an issue while setting favorite reciters and we hope it gets fixed soon.`
+      try {
+        bot.telegram
+          .sendMessage(chatId, msg, {
+            reply_markup: {
+              inline_keyboard: [
+                [
+                  {
+                    text: "🎁",
+                    callback_data: "surpriseAya",
+                  },
+                ],
+              ],
+            },
+          })
+          .catch((er) =>
+            log(
+              `Error while sending sorry for failing to set fav reciter: `,
+              er
+            )
+          )
+      } catch (error) {
+        console.log(error)
+      }
     })
 }
 
@@ -332,9 +352,13 @@ bot.telegram.getMe().then((botInfo) => {
 
 // Inform Dev group about the instance state
 if (telegramToken) {
-  bot.telegram
-    .sendMessage(devChatId, instStateMsg())
-    .catch((er) => log(`Error while sending instance state: `, er))
+  try {
+    bot.telegram
+      .sendMessage(devChatId, instStateMsg())
+      .catch((er) => log(`Error while sending instance state: `, er))
+  } catch (error) {
+    console.log(error)
+  }
 }
 
 async function start(chatId) {
@@ -342,22 +366,26 @@ async function start(chatId) {
 Для доступных команд:
 
 /commands`
-
-  bot.telegram
-    .sendMessage(chatId, msg, {
-      reply_markup: {
-        inline_keyboard: [
-          [
-            {
-              text: "🎁",
-              callback_data: "surpriseAya",
-            },
+  try {
+    bot.telegram
+      .sendMessage(chatId, msg, {
+        reply_markup: {
+          inline_keyboard: [
+            [
+              {
+                text: "🎁",
+                callback_data: "surpriseAya",
+              },
+            ],
           ],
-        ],
-      },
-    })
-    .then((c) => successSend(c, 0, "", "request"))
-    .catch((e) => log("Error while sending start: ", e))
+        },
+      })
+      .then((c) => successSend(c, 0, "", "request"))
+      .catch((e) => log("Error while sending start: ", e))
+  } catch (error) {
+    console.log(error)
+  }
+
   summaryStats()
 }
 
@@ -382,10 +410,13 @@ async function summaryStats() {
       }   Blocked: ${totalBlockedChats}\n` +
       `Private Active: ${privateActiveChats}    Others: ${otherActiveChats}`
     log(totalChatsMsg)
-
-    bot.telegram
-      .sendMessage(devChatId, totalChatsMsg)
-      .catch((err) => log(`Error while sending active stats: `, err))
+    try {
+      bot.telegram
+        .sendMessage(devChatId, totalChatsMsg)
+        .catch((err) => log(`Error while sending active stats: `, err))
+    } catch (error) {
+      console.log(error)
+    }
   } catch (e) {
     log("Error while getting total chats: ", e)
   }
@@ -416,12 +447,16 @@ function checkSource() {
   axios("http://api.alquran.cloud/v1/quran/quran-uthmani")
     .then((r) => {
       if (JSON.stringify(r.data.data.surahs) != JSON.stringify(arQuran)) {
-        bot.telegram
-          .sendMessage(
-            devChatId,
-            `Remote arQuran has changed. Please update the cached JSON file.`
-          )
-          .catch((er) => log(`Error while sending arQuran change: `, er))
+        try {
+          bot.telegram
+            .sendMessage(
+              devChatId,
+              `Remote arQuran has changed. Please update the cached JSON file.`
+            )
+            .catch((er) => log(`Error while sending arQuran change: `, er))
+        } catch (error) {
+          console.log(error)
+        }
       } else {
         log(
           `Remote arQuran is the same as the cached JSON file. It took ${(
@@ -435,12 +470,16 @@ function checkSource() {
   axios("http://api.alquran.cloud/v1/quran/en.ahmedraza")
     .then((r) => {
       if (JSON.stringify(r.data.data.surahs) != JSON.stringify(ruQuran)) {
-        bot.telegram
-          .sendMessage(
-            devChatId,
-            `Remote ruQuran has changed. Please update the cached JSON file.`
-          )
-          .catch((er) => log(`Error while sending ruQuran change: `, er))
+        try {
+          bot.telegram
+            .sendMessage(
+              devChatId,
+              `Remote ruQuran has changed. Please update the cached JSON file.`
+            )
+            .catch((er) => log(`Error while sending ruQuran change: `, er))
+        } catch (error) {
+          console.log(error)
+        }
       } else {
         log(
           `Remote ruQuran is the same as the cached JSON file. It took ${(
@@ -457,12 +496,16 @@ function checkSource() {
         JSON.stringify(r.data.data.filter((i) => i.language == "ar")) !=
         JSON.stringify(arReciters)
       ) {
-        bot.telegram
-          .sendMessage(
-            devChatId,
-            `Remote arReciters has changed. Please update the cached JSON file.`
-          )
-          .catch((er) => log(`Error while sending arReciters change: `, er))
+        try {
+          bot.telegram
+            .sendMessage(
+              devChatId,
+              `Remote arReciters has changed. Please update the cached JSON file.`
+            )
+            .catch((er) => log(`Error while sending arReciters change: `, er))
+        } catch (error) {
+          console.log(error)
+        }
       } else {
         log(
           `Remote arReciters is the same as the cached JSON file. It took ${(
@@ -666,31 +709,35 @@ function sendAyaText(chatId, ayaId, reciter, lang, trigger) {
       buttons = aMenuButtons("t0", ayaId, reciter) // Prepare buttons to be sent with Aya text
 
     // send aya text and inline buttons
-    bot.telegram
-      .sendMessage(chatId, ayaDualText, {
-        disable_web_page_preview: true,
-        disable_notification: true,
-        parse_mode: "HTML",
-        reply_markup: buttons,
-      })
-      .then((c) => {
-        successSend(c, ayaId, lang, trigger)
-        resolve(c)
-      })
-      .catch((e) => {
-        if (e.response?.description?.includes("upgraded to a supergroup")) {
-          sendAyaText(
-            e.response.parameters.migrate_to_chat_id,
-            ayaId,
-            reciter,
-            lang,
-            trigger
-          )
-          lastAyaTime(chatId, "blocked")
-        } else {
-          reject(e)
-        }
-      })
+    try {
+      bot.telegram
+        .sendMessage(chatId, ayaDualText, {
+          disable_web_page_preview: true,
+          disable_notification: true,
+          parse_mode: "HTML",
+          reply_markup: buttons,
+        })
+        .then((c) => {
+          successSend(c, ayaId, lang, trigger)
+          resolve(c)
+        })
+        .catch((e) => {
+          if (e.response?.description?.includes("upgraded to a supergroup")) {
+            sendAyaText(
+              e.response.parameters.migrate_to_chat_id,
+              ayaId,
+              reciter,
+              lang,
+              trigger
+            )
+            lastAyaTime(chatId, "blocked")
+          } else {
+            reject(e)
+          }
+        })
+    } catch (error) {
+      console.log(error)
+    }
   })
 }
 
@@ -902,17 +949,20 @@ Sorry.. There's an issue in Aya texts and we hope it gets fixed soon.`
 Sorry.. An unknown issue happened.`
         break
     }
-
-    bot.telegram
-      .sendMessage(chatId, msg, { disable_notification: true })
-      .then((ctx) => {
-        log(`Sorry message sent to ${chatId} due to ${reason}.`)
-        resolve(ctx)
-      })
-      .catch((e) => {
-        log(`Failed to send sorry message to ${chatId}: `, e)
-        reject(e)
-      })
+    try {
+      bot.telegram
+        .sendMessage(chatId, msg, { disable_notification: true })
+        .then((ctx) => {
+          log(`Sorry message sent to ${chatId} due to ${reason}.`)
+          resolve(ctx)
+        })
+        .catch((e) => {
+          log(`Failed to send sorry message to ${chatId}: `, e)
+          reject(e)
+        })
+    } catch (error) {
+      console.log(error)
+    }
   })
 }
 
@@ -946,34 +996,38 @@ function unrecognized(ctx, reason) {
             break
         }
 
-        bot.telegram
-          .sendMessage(chatId, msg, {
-            reply_markup: {
-              inline_keyboard: [
-                [
-                  {
-                    text: "🎁",
-                    callback_data: "surpriseAya",
-                  },
-                  {
-                    text: "🤔",
-                    callback_data: "instructions",
-                  },
+        try {
+          bot.telegram
+            .sendMessage(chatId, msg, {
+              reply_markup: {
+                inline_keyboard: [
+                  [
+                    {
+                      text: "🎁",
+                      callback_data: "surpriseAya",
+                    },
+                    {
+                      text: "🤔",
+                      callback_data: "instructions",
+                    },
+                  ],
                 ],
-              ],
-            },
-          })
-          .then(
-            log("Sent reason of unrecognized request to chat " + chatId + ".")
-          )
-          .catch((e) =>
-            log(
-              "Failed to send reason of unrecognized request to chat " +
-                chatId +
-                ": ",
-              e
+              },
+            })
+            .then(
+              log("Sent reason of unrecognized request to chat " + chatId + ".")
             )
-          )
+            .catch((e) =>
+              log(
+                "Failed to send reason of unrecognized request to chat " +
+                  chatId +
+                  ": ",
+                e
+              )
+            )
+        } catch (error) {
+          console.log(error)
+        }
       } else {
         log(
           `Ignored message from non-admin user ${ctx.from.id} in chat ${ctx.chat.id}.`
@@ -989,12 +1043,16 @@ function instructions(chatId) {
 Пример: 22 55
 Или только номер суры: 2`
 
-  bot.telegram
-    .sendMessage(chatId, msg)
-    .then(log("Sent instructions message to chat " + chatId + "."))
-    .catch((e) =>
-      log("Failed to send instructions message to chat " + chatId + ": ", e)
-    )
+  try {
+    bot.telegram
+      .sendMessage(chatId, msg)
+      .then(log("Sent instructions message to chat " + chatId + "."))
+      .catch((e) =>
+        log("Failed to send instructions message to chat " + chatId + ": ", e)
+      )
+  } catch (error) {
+    console.log(error)
+  }
 }
 
 // Converting input arabic number into english one to easily find numbers in sent messages
@@ -1157,20 +1215,24 @@ bot.command("support", (ctx) => {
     .then((isAdmin) => {
       if (isAdmin) {
         var msg = `👨‍💻`
-        bot.telegram
-          .sendMessage(ctx.chat.id, msg, {
-            reply_markup: {
-              inline_keyboard: [
-                [
-                  {
-                    text: "Связь 💬",
-                    url: "https://t.me/Vasya95ast",
-                  },
+        try {
+          bot.telegram
+            .sendMessage(ctx.chat.id, msg, {
+              reply_markup: {
+                inline_keyboard: [
+                  [
+                    {
+                      text: "Связь 💬",
+                      url: "https://t.me/Vasya95ast",
+                    },
+                  ],
                 ],
-              ],
-            },
-          })
-          .catch((er) => log(`Error while sending support message: `, er))
+              },
+            })
+            .catch((er) => log(`Error while sending support message: `, er))
+        } catch (error) {
+          console.log(error)
+        }
       } else {
         log(
           `Ignored command from non-admin user ${ctx.from.id} in chat ${ctx.chat.id}.`
@@ -1186,11 +1248,15 @@ bot.command("reciters", (ctx) => {
     .then((isAdmin) => {
       if (isAdmin) {
         var msg = `Выберите чтеца...`
-        bot.telegram.sendMessage(ctx.chat.id, msg, {
-          reply_markup: {
-            inline_keyboard: recitersNavPage(1),
-          },
-        })
+        try {
+          bot.telegram.sendMessage(ctx.chat.id, msg, {
+            reply_markup: {
+              inline_keyboard: recitersNavPage(1),
+            },
+          })
+        } catch (error) {
+          console.log(error)
+        }
       } else {
         log(
           `Ignored command from non-admin user ${ctx.from.id} in chat ${ctx.chat.id}.`
@@ -1205,9 +1271,13 @@ bot.command("channel", (ctx) => {
     .then((isAdmin) => {
       if (isAdmin) {
         var msg = `https://t.me/DailyAyaGlobal`
-        bot.telegram
-          .sendMessage(ctx.chat.id, msg)
-          .catch((er) => log(`Error while sending channel message: `, er))
+        try {
+          bot.telegram
+            .sendMessage(ctx.chat.id, msg)
+            .catch((er) => log(`Error while sending channel message: `, er))
+        } catch (error) {
+          console.log(error)
+        }
       } else {
         log(
           `Ignored command from non-admin user ${ctx.from.id} in chat ${ctx.chat.id}.`
@@ -1226,9 +1296,13 @@ bot.command("commands", (ctx) => {
           commands.forEach((item) => {
             msg += `/${item.command}\n${item.description}\n\n`
           })
-          bot.telegram
-            .sendMessage(ctx.chat.id, msg)
-            .catch((er) => log(`Error while sending channel message: `, er))
+          try {
+            bot.telegram
+              .sendMessage(ctx.chat.id, msg)
+              .catch((er) => log(`Error while sending channel message: `, er))
+          } catch (error) {
+            console.log(error)
+          }
         })
       } else {
         log(
