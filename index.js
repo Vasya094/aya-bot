@@ -207,18 +207,20 @@ function setFavReciter(chatId, reciterIdentifier) {
         msg = `Текущий любимый чтец: ${requestedFavReciterData[0].englishName}`
       }
       try {
-        bot.telegram.sendMessage(chatId, msg, {
-          reply_markup: {
-            inline_keyboard: [
-              [
-                {
-                  text: "🎁",
-                  callback_data: "surpriseAya",
-                },
+        bot.telegram
+          .sendMessage(chatId, msg, {
+            reply_markup: {
+              inline_keyboard: [
+                [
+                  {
+                    text: "🎁",
+                    callback_data: "surpriseAya",
+                  },
+                ],
               ],
-            ],
-          },
-        })
+            },
+          })
+          .catch((e) => console.log(e))
       } catch (error) {
         console.log(error)
       }
@@ -1249,11 +1251,13 @@ bot.command("reciters", (ctx) => {
       if (isAdmin) {
         var msg = `Выберите чтеца...`
         try {
-          bot.telegram.sendMessage(ctx.chat.id, msg, {
-            reply_markup: {
-              inline_keyboard: recitersNavPage(1),
-            },
-          })
+          bot.telegram
+            .sendMessage(ctx.chat.id, msg, {
+              reply_markup: {
+                inline_keyboard: recitersNavPage(1),
+              },
+            })
+            .catch((e) => console.log(e))
         } catch (error) {
           console.log(error)
         }
